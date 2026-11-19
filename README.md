@@ -25,3 +25,14 @@ from llm_reasoning.config import make_config
 config = make_config("smoke")
 print(config.model, config.paths.checkpoints)
 ```
+
+## Prepare pretraining data on Kaggle CPU
+
+Install the optional data dependencies and run the streaming preparation command in a Kaggle CPU notebook or terminal:
+
+```bash
+uv sync --group data
+uv run --group data python -m llm_reasoning.pretrain_data --output /kaggle/working/llm-reasoning
+```
+
+The command reads FineWeb-Edu `sample-10BT` and OpenWebMath, trains the custom BPE on train documents, then writes uint16 blocks of 512 tokens by source and split. Outputs include `tokenizer.json`, source manifests, a combined manifest and binary shards under `data/pretrain/`. The default targets are 80M education tokens and 20M math tokens, counted with this tokenizer. Use `--fineweb-tokens` and `--math-tokens` for a small dry run before the full preparation. The actual data volumes and processing time have not yet been verified on Kaggle.
