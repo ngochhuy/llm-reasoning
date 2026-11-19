@@ -10,6 +10,8 @@
 **Benchmark chính:** GSM8K  
 **Mục tiêu huấn luyện:** một mô hình duy nhất, qua hai giai đoạn liên tiếp (pretrain → SFT), chọn một checkpoint cuối
 
+**Tổ chức thực hiện:** theo `KE_HOACH_THUC_HIEN.md`, gồm 5 giai đoạn có điểm dừng review; chỉ chuyển giai đoạn sau phản hồi của người thực hiện. Không tạo bản đề cương nộp riêng 2 trang theo phạm vi đã thống nhất.
+
 > **Phạm vi của “từ đầu”.** Tokenizer và kiến trúc được tự lập trình; trọng số mô hình khởi tạo ngẫu nhiên, không nạp checkpoint mô hình ngôn ngữ có sẵn. Có thể dùng các phép toán, bộ tối ưu và công cụ dữ liệu của PyTorch. Không dùng lớp đóng gói sẵn toàn bộ mô hình hoặc attention làm kiến trúc chính.
 
 ## 1. Mục tiêu và câu hỏi nghiên cứu
@@ -124,6 +126,8 @@ Nếu chạy cả hai giai đoạn trong một phiên 12 giờ, dành trước *
 
 ## 5. KV cache và benchmark hệ thống
 
+Trước train chính, kiểm tra tính đúng của KV cache và chuẩn bị script đo. **Profiling chính thức dùng checkpoint sau pretrain trên T4**, cùng một checkpoint cho cache ON/OFF; xuất bảng, biểu đồ và báo cáo ngắn. Sau đó tiếp tục SFT từ checkpoint pretrain để đánh giá reasoning. Không yêu cầu đo lại chỉ vì SFT thay đổi trọng số; nếu sửa kiến trúc, code inference hoặc cấu hình đo thì cập nhật profiling trên cùng checkpoint pretrain.
+
 Tự triển khai cache K/V theo từng lớp, prefill prompt, nối K/V khi decode, đặt vị trí RoPE đúng theo offset, kiểm tra giới hạn tổng chiều dài và hỗ trợ bật/tắt cache. Trước train chính, kiểm tra logits cached và non-cached gần tương đương trong FP32; sau đó kiểm tra lại FP16 với tolerance phù hợp. Ở chế độ `eval`, greedy token phải giống nhau trên một tập prompt kiểm tra.
 
 Benchmark prompt dài **128, 512, 1.024, 2.048 token**. Mỗi lượt sinh cùng một số token mới, ví dụ 128 hoặc 256; đặt giới hạn tổng dài đủ cho prompt 2.048. Với mỗi cấu hình ghi:
@@ -157,28 +161,35 @@ Chuẩn hóa số nguyên, số âm, dấu phẩy hàng nghìn và thập phân;
 
 ## 7. Mã nguồn, notebook và tái lập
 
-Các thuật toán nằm trong module `.py`; notebook chỉ gọi module, ghi cấu hình, biểu đồ và nhận xét. Với 12 ngày, dùng **bốn notebook**:
+Các thuật toán nằm trong module `.py`; notebook chỉ gọi module, ghi cấu hình, biểu đồ và nhận xét. Dùng **bảy notebook** trong `notebooks/`:
 
-1. `01_data_tokenizer.ipynb` — thống kê, làm sạch, tokenizer.
-2. `02_model_training.ipynb` — kiểm tra mô hình, pilot, pretrain và SFT.
-3. `03_kv_cache_benchmark.ipynb` — kiểm tra đúng và profiling.
-4. `04_reasoning_evaluation.ipynb` — greedy, voting, Best-of-N, phân tích lỗi.
+1. `01_data_exploration.ipynb` — khảo sát nguồn dữ liệu, thống kê, chốt lọc và split; local/Kaggle CPU.
+2. `02_tokenizer_data_preparation.ipynb` — huấn luyện và kiểm tra BPE, tạo dữ liệu pretrain/SFT đã token hóa; Kaggle CPU.
+3. `03_model_sanity_checks.ipynb` — kiến trúc, số tham số, forward/backward, overfit một batch, cache và checkpoint/resume; local GPU/T4.
+4. `04_pretraining.ipynb` — pilot trong cùng run, pretrain, loss và checkpoint; Kaggle T4.
+5. `05_kv_cache_profiling.ipynb` — nạp checkpoint pretrain, đo cache ON/OFF và xuất báo cáo; Kaggle T4.
+6. `06_math_sft.ipynb` — nạp checkpoint pretrain, SFT và chọn checkpoint bằng validation; Kaggle T4.
+7. `07_reasoning_evaluation.ipynb` — nạp checkpoint SFT, greedy, voting, Best-of-N, đánh giá và phân tích lỗi; Kaggle T4.
 
-Module gợi ý: `tokenizer/`, `model/`, `data/`, `training/`, `inference/`, `evaluation/`, `tests/`, `configs/`. Không tạo tám notebook chỉ để đủ số lượng; nếu đơn vị chấm yêu cầu tám, tách notebook sau khi pipeline hoàn thiện.
+Thứ tự chạy là 01 → 02 → 03 → 04 → 05 → 06 → 07. Mỗi notebook chạy độc lập trong phiên mới bằng artifact đã lưu, không phụ thuộc biến bộ nhớ của notebook trước. Notebook 06 tiếp tục từ trọng số notebook 04 đã xuất, không chạy lại pretrain; profiling không sửa checkpoint. Manifest, tokenizer, checkpoint và log được lưu bền vững để chuyển phiên. Chi tiết đầu vào/đầu ra và task tương ứng nằm trong `KE_HOACH_THUC_HIEN.md`.
+
+Module gợi ý: `tokenizer/`, `model/`, `data/`, `training/`, `inference/`, `evaluation/`, `tests/`, `configs/`.
 
 Dùng `pyproject.toml` và `uv.lock` cho môi trường local. Trên Kaggle, kiểm tra Python, PyTorch và CUDA trước khi cài dependencies; không thay bản PyTorch có CUDA đang chạy chỉ để đồng bộ lockfile. Ghi các phiên bản thực tế, seed, commit Git, hash hoặc phiên bản dữ liệu, tham số huấn luyện và đường dẫn checkpoint. `README.md` có lệnh chạy từ chuẩn bị dữ liệu đến đánh giá; không commit dữ liệu lớn, checkpoint hoặc thông tin xác thực vào Git.
+
+Chọn **TensorBoard** để lưu train/validation loss của cả pretrain và SFT; bàn giao event files, biểu đồ và log dạng bảng. README có **một lệnh tái lập đánh giá từ checkpoint cuối**, ghi rõ artifact, môi trường và cách lấy dữ liệu/checkpoint; quy trình train từ đầu và resume được hướng dẫn riêng. Demo terminal có một lệnh nạp checkpoint, chạy forward và sinh tự hồi quy; demo tương tác cuối cho phép nhập câu hỏi, chọn greedy/voting/Best-of-N và xem token/thời gian.
 
 ## 8. Lịch triển khai 12 ngày
 
 | Ngày | Kết quả bắt buộc |
 |---|---|
 | 1–2 | Repository, cấu hình, pipeline dữ liệu mẫu, BPE và kiểm tra tokenizer. |
-| 3–4 | Transformer, forward/backward, causal mask, RoPE, greedy generation, KV cache, kiểm tra cached/non-cached và lưu/resume. |
-| 5–6 | Pilot trong cùng run, pretrain theo mốc thời gian, checkpoint và log. |
-| 7 | SFT Orca Math + GSM8K train, chọn checkpoint theo validation. |
-| 8–9 | Benchmark KV cache; bộ trích đáp số, self-consistency và verifier trên validation. |
+| 3–4 | Transformer, forward/backward, causal mask, RoPE, greedy generation, KV cache, kiểm tra cached/non-cached, lưu/resume và chuẩn bị script profiling. |
+| 5–6 | Pilot trong cùng run, pretrain theo mốc thời gian, checkpoint và log; demo nạp checkpoint pretrain và profiling chính thức cache ON/OFF trên T4. |
+| 7 | SFT Orca Math + GSM8K train, chọn checkpoint theo validation; bàn giao TensorBoard logs và biểu đồ loss cả hai giai đoạn. |
+| 8–9 | Rà báo cáo KV cache từ checkpoint pretrain; bộ trích đáp số, self-consistency và verifier trên validation bằng checkpoint SFT. |
 | 10 | Khóa cấu hình, chạy đánh giá test; lưu dự đoán, chi phí và ít nhất năm ca sai. |
-| 11–12 | Báo cáo 6–8 trang, README, demo, slide và rà kết quả tái lập. |
+| 11–12 | Báo cáo IEEE conference hai cột 6–8 trang, README với lệnh tái lập đánh giá, demo terminal tương tác, slide và rà kết quả tái lập. |
 
 Viết mô tả phương pháp, sơ đồ kiến trúc và bảng cấu hình trong khi phát triển; không dồn toàn bộ báo cáo sang ngày cuối.
 
@@ -187,11 +198,11 @@ Viết mô tả phương pháp, sơ đồ kiến trúc và bảng cấu hình tr
 1. Tokenizer tự xây encode/decode đúng trên văn bản và ký hiệu toán; có file lưu và nạp lại.
 2. Transformer tự viết chạy forward/backward, loss giảm trên một batch nhỏ, có số tham số được đo.
 3. Causal mask ngăn nhìn token tương lai; cache giữ logits/greedy gần tương đương với chế độ không cache.
-4. Có checkpoint pretrain và checkpoint SFT từ **cùng một chuỗi huấn luyện**, log loss và số token thực tế.
-5. Có bảng cache ON/OFF tại L = 128, 512, 1.024, 2.048 với latency, throughput, VRAM và cấu hình đo.
+4. Có checkpoint pretrain và checkpoint SFT từ **cùng một chuỗi huấn luyện**, TensorBoard event files, biểu đồ loss và số token thực tế; demo nạp trọng số và sinh tự hồi quy chạy được.
+5. Có báo cáo profiling chính thức dùng checkpoint pretrain trên T4: bảng/biểu đồ cache ON/OFF tại L = 128, 512, 1.024, 2.048 với latency, throughput, VRAM và cấu hình đo. Trước train phải kiểm tra cache đúng; không bắt buộc đo lại sau SFT.
 6. Có script đánh giá GSM8K, báo cáo greedy, Pass@k, majority voting và Best-of-N; không dùng test để tinh chỉnh.
 7. Có phân tích ít nhất năm ca thất bại, giới hạn của verifier và giới hạn do mô hình nhỏ/ít token.
-8. README hướng dẫn một quy trình chạy lại rõ ràng; báo cáo 6–8 trang, demo và slide.
+8. README có một lệnh tái lập đánh giá từ checkpoint cuối và hướng dẫn train/resume; báo cáo IEEE conference hai cột 6–8 trang, demo terminal tương tác và slide.
 
 ## 10. Rủi ro và phương án xử lý
 
@@ -206,7 +217,7 @@ Viết mô tả phương pháp, sơ đồ kiến trúc và bảng cấu hình tr
 
 ## 11. Sản phẩm bàn giao
 
-Repository chứa mã nguồn PyTorch, tokenizer, cấu hình, bốn notebook thí nghiệm, kiểm tra cần thiết, README, script đánh giá và profiling. Kết quả gồm checkpoint cuối, log huấn luyện, bảng/biểu đồ cache, bảng accuracy–compute, dự đoán và phân tích lỗi. Báo cáo khoa học 6–8 trang theo cấu trúc Abstract, Method, Experimental Setup, Results, Discussion, Ethics & Limitations; kèm slide và demo inference.
+Repository chứa mã nguồn PyTorch, tokenizer, cấu hình, bảy notebook thí nghiệm, kiểm tra cần thiết, README, script đánh giá và profiling. Kết quả gồm checkpoint pretrain/SFT, TensorBoard event files và log dạng bảng, báo cáo profiling chính thức từ checkpoint pretrain, bảng accuracy–compute, dự đoán và phân tích lỗi. Báo cáo khoa học **IEEE conference hai cột, 6–8 trang**, theo cấu trúc Abstract, Method, Experimental Setup, Results, Discussion, Ethics & Limitations; kèm slide và demo terminal tương tác. README cung cấp một lệnh tái lập đánh giá từ checkpoint cuối cùng các bước chuẩn bị môi trường và artifact.
 
 ## 12. Kết luận
 

@@ -1,0 +1,24 @@
+.venv/
+.uv-cache/
+.uv-python/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+.ipynb_checkpoints/
+.env
+.env.*
+
+# Generated datasets, checkpoints, logs, and notebook output
+artifacts/
+checkpoints/
+data/processed/
+data/raw/
+logs/
+results/
+runs/
+wandb/
+*.pt
+*.pth
+*.ckpt
+events.out.tfevents.*
