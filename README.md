@@ -36,3 +36,15 @@ uv run --group data python -m llm_reasoning.pretrain_data --output /kaggle/worki
 ```
 
 The command reads FineWeb-Edu `sample-10BT` and OpenWebMath, trains the custom BPE on train documents, then writes uint16 blocks of 512 tokens by source and split. Outputs include `tokenizer.json`, source manifests, a combined manifest and binary shards under `data/pretrain/`. The default targets are 80M education tokens and 20M math tokens, counted with this tokenizer. Use `--fineweb-tokens` and `--math-tokens` for a small dry run before the full preparation. The actual data volumes and processing time have not yet been verified on Kaggle.
+
+## Prepare math SFT data on Kaggle CPU
+
+After the pretraining tokenizer exists, prepare Orca Math and GSM8K with the same tokenizer:
+
+```bash
+uv run --group data python -m llm_reasoning.sft_data \
+  --pretrain-dir /kaggle/working/llm-reasoning/data/pretrain \
+  --output /kaggle/working/llm-reasoning/data/sft
+```
+
+The command writes `orca_train.jsonl`, `gsm_train.jsonl`, `gsm_validation.jsonl`, the original `gsm_test.jsonl`, and `manifest.json`. Training records contain `input_ids`, `loss_mask`, and the final numeric answer. The `loss_mask` is zero for the question prompt and one for the solution and answer; the future training loop will shift it with causal LM targets. The test file contains no SFT tokens. Review the manifest and sample answers before using these files for GPU training.
