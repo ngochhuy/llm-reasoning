@@ -20,11 +20,11 @@ Không tạo bản đề cương kỹ thuật 2 trang theo quyết định của
 |---|---|---|
 | 1.1 | Khởi tạo package Python 3.11, uv, pytest, cấu trúc artifact và gitignore | Import package được; có pyproject và lockfile; bỏ qua dữ liệu lớn, checkpoint và thông tin xác thực. |
 | 1.2 | Tạo cấu hình dữ liệu, tokenizer, mô hình, train, evaluation và đường dẫn local/Kaggle | Có cấu hình kiểm tra nhỏ và cấu hình 36M; lỗi cấu hình được phát hiện sớm. |
-| 1.3 | Kiểm tra mẫu FineWeb-Edu, OpenWebMath, Orca Math và GSM8K | Bảng trường dữ liệu, độ dài, chất lượng, ví dụ và quy tắc lọc. Nếu đổi OpenWebMath sang FineMath phải chốt trước run chính. |
+| 1.3 | Kiểm tra mẫu FineWeb-Edu, OpenWebMath và GSM8K | Bảng trường dữ liệu, độ dài, chất lượng, ví dụ và quy tắc lọc. Nếu đổi OpenWebMath sang FineMath phải chốt trước run chính. |
 | 1.4 | Chuẩn hóa, loại trùng và tạo split cố định | Manifest nguồn, revision, seed và số mẫu bị loại; pretrain validation 1% tài liệu, GSM8K validation 500 câu lấy từ train; không dùng test để chọn cấu hình. |
 | 1.5 | Tự viết byte-level BPE khoảng 8.000 token | Có train/encode/decode/save/load, special token; round-trip văn bản, số và ký hiệu toán; save/load giữ nguyên ID. |
 | 1.6 | Xây pipeline pretrain chạy trên Kaggle CPU | Tokenizer chỉ học trên mẫu train; shard có EOS, block 512; nhắm tới 80M token FineWeb-Edu + 20M token toán; ghi token thực tế và hash tokenizer. |
-| 1.7 | Xây pipeline SFT | Chọn khoảng 20–40 nghìn bài Orca Math và GSM8K train; thống nhất think/answer; có response mask, EOS, thống kê lỗi và độ dài; không cắt mất đáp số. |
+| 1.7 | Xây pipeline SFT | Chỉ dùng GSM8K train: tách 500 validation từ 7.473 câu; khoảng 6.973 câu trước lọc. Thống nhất think/answer, response mask, EOS và thống kê lỗi/độ dài. |
 | 1.8 | Hoàn thiện notebook 01–02 và bàn giao | Notebook 01 khảo sát dữ liệu; notebook 02 huấn luyện tokenizer và tạo artifact. Mẫu nhỏ đã chạy, test tokenizer đạt; hướng dẫn tạo artifact đầy đủ trên Kaggle CPU và bảng cần người thực hiện review. |
 
 **Điểm dừng:** review dữ liệu, cách chia validation, tokenizer và định dạng SFT. Dữ liệu đầy đủ phải được tạo xong trước giai đoạn chạy GPU chính.
@@ -48,6 +48,26 @@ Không tạo bản đề cương kỹ thuật 2 trang theo quyết định của
 
 **Điểm dừng:** chỉ chạy train chính sau review. Lỗi causal mask, cache hoặc resume phải được sửa trước. Local RTX 4050 dùng cấu hình nhỏ; profiling bàn giao dùng T4, không suy diễn tốc độ từ local.
 
+**Trạng thái task 2.1:** đã triển khai `layers.py`, kiểm thử CPU đạt (toàn bộ suite 30/30). Báo cáo: `docs/task_2_1_layers_report.md`. Đang chờ review trước task 2.2; chưa train chính.
+
+**Trạng thái task 2.2:** đã triển khai `attention.py`, kiểm tra causal mask, gradient và ổn định số; toàn bộ suite 39/39 đạt trên CPU. Báo cáo: `docs/task_2_2_attention_report.md`. Chờ review trước task 2.3; chưa train chính.
+
+**Trạng thái task 2.3:** đã ghép `model.py`, Pre-Norm 10 lớp, weight tying, forward/backward và causal logits đạt; toàn bộ suite 47/47 đạt trên CPU. Cấu hình vocab 8.000 có 35.564.032 tham số. Báo cáo: `docs/task_2_3_transformer_report.md`. Chờ review trước task 2.4; chưa train chính.
+
+**Trạng thái task 2.4:** đã có `generation.py` với greedy, temperature/top-p, EOS và giới hạn token/context; toàn bộ suite 61/61 đạt trên CPU. Báo cáo: `docs/task_2_4_generation_report.md`. Chờ review trước task 2.5; chưa có KV cache và chưa train chính.
+
+**Trạng thái task 2.5:** đã có `kv_cache.py`, prefill/append/reset, RoPE offset và generation cache ON/OFF; logits gần tương đương và greedy giống nhau trên tập thử. Toàn bộ suite 85/85 đạt trên CPU. Báo cáo: `docs/task_2_5_kv_cache_report.md`. Chờ review trước task 2.6; chưa đo profiling T4 hoặc train chính.
+
+**Trạng thái task 2.6:** đã có `training.py`, loss/mask, AdamW, accumulation, clipping, schedule, validation, CSV/TensorBoard; overfit batch giả đạt cho pretrain và SFT. Suite 95 passed, 1 skipped (CUDA FP16 chưa có GPU). Báo cáo: `docs/task_2_6_training_report.md`; artifact thử: `artifacts/task_2_6_smoke_verified/`. Chờ review trước task 2.7; chưa train chính.
+
+**Trạng thái task 2.7:** đã có checkpoint đầy đủ, data stream có cursor/shuffle/epoch, RNG, periodic save và nối log khi resume. CPU run liên tục/ngắt-resume khớp chính xác cho cả pretrain và SFT thử. Suite 104 passed, 2 skipped (CUDA). Báo cáo: `docs/task_2_7_checkpoint_report.md`; artifact: `artifacts/task_2_7_smoke_verified/`. Chờ review trước task 2.8; chưa train chính.
+
+**Trạng thái task 2.8:** đã có CLI `python -m llm_reasoning.demo`, một lệnh tạo/nạp checkpoint thử, kiểm tra forward và sinh tự hồi quy; có thông báo checkpoint random/chưa train. Suite 115 passed, 2 skipped (CUDA). Báo cáo: `docs/task_2_8_demo_report.md`; artifact: `artifacts/task_2_8_demo_verified/`. Chờ review trước task 2.9; chưa train chính.
+
+**Trạng thái task 2.9:** đã có CLI `python -m llm_reasoning.profiling`, warmup/lặp/trung vị, latency/throughput/VRAM, ghi OOM và xuất CSV/JSON/PNG/PDF/báo cáo. CPU smoke đủ prompt 128/512/1024/2048, mọi cặp greedy ON/OFF khớp. Suite 121 passed, 3 skipped (CUDA). Báo cáo: `docs/task_2_9_profiling_report.md`; artifact: `artifacts/task_2_9_profile_final/`. Chờ review trước task 2.10; chưa đo chính thức trên checkpoint pretrain/T4.
+
+**Trạng thái task 2.10:** đã tạo notebook 03–06, lớp đọc shard/JSONL theo microbatch có fingerprint cho resume, run manifest, cổng `inspect`/`smoke`/`production` và hướng dẫn commit SHA/artifact. CPU smoke liên tiếp 04→05→06 với dữ liệu đã chuẩn bị đạt; toàn suite 123 passed, 3 skipped (CUDA). Báo cáo: `docs/task_2_10_notebooks_report.md`. Dừng để review trước task 3.1; chưa train hay profiling chính thức trên T4.
+
 ## 4. Giai đoạn 3 — Huấn luyện một mô hình trên Kaggle
 
 **Lịch mục tiêu:** ngày 5–7. **Review 3:** checkpoint cùng TensorBoard logs của pretrain/SFT.
@@ -57,7 +77,7 @@ Không tạo bản đề cương kỹ thuật 2 trang theo quyết định của
 | 3.1 | Kiểm tra trước run | GPU, quota, commit, dữ liệu, tokenizer hash và nơi xuất artifact đúng; chuẩn bị dữ liệu hoàn tất trước khi bật GPU. |
 | 3.2 | Pilot trong run chính bằng notebook 04 | 200–500 bước đầu đo throughput sau warmup, VRAM và loss; tính ngân sách thời gian còn lại rồi tiếp tục từ cùng trạng thái. |
 | 3.3 | Pretrain bằng notebook 04, profiling bằng notebook 05 | Chạy đến 100M token hoặc mốc dừng theo thời gian; lưu checkpoint pretrain và loss. Notebook 05 nạp checkpoint này để demo nạp trọng số/sinh tự hồi quy và đo cache ON/OFF trên T4. Prompt 128/512/1024/2048, sinh cố định 128 token, warmup và 5 lượt đo; xuất trung vị latency, throughput, peak VRAM, bảng, biểu đồ và báo cáo ngắn. |
-| 3.4 | SFT bằng notebook 06 | Nạp artifact checkpoint pretrain với optimizer/schedule SFT riêng; response-only loss; tối đa 5–8M token đã xử lý; chọn checkpoint bằng validation. Chạy trong phiên mới không yêu cầu chạy lại notebook 04. |
+| 3.4 | SFT bằng notebook 06 | Nạp checkpoint pretrain với optimizer/schedule SFT riêng; response-only loss; bắt đầu 1 epoch, tối đa 3 epoch và trần 8M token; chọn checkpoint bằng validation, không ép đạt 5M token. Chạy trong phiên mới không yêu cầu chạy lại notebook 04. |
 | 3.5 | Xuất và kiểm tra artifact | Checkpoint cuối, tokenizer, cấu hình, log dạng bảng, TensorBoard event files và biểu đồ loss; kiểm tra nạp lại từ bản đã xuất. |
 | 3.6 | Phân tích và bàn giao | Báo ổn định, overfit, định dạng đầu ra, token, throughput, VRAM và thời gian GPU; chốt checkpoint đánh giá duy nhất. |
 
@@ -136,3 +156,7 @@ Lịch 12 ngày là lịch thực hiện rút gọn. Hạn nộp từng cột m�
 - Khi thiếu thời gian, điều chỉnh token pretrain theo pilot và giảm trang trí demo; giữ đầy đủ phép đo, phân tích lỗi và tài liệu bàn giao.
 - Mỗi giai đoạn có kết quả kiểm tra hoặc log thật; mục chờ chạy Kaggle phải ghi rõ trạng thái.
 - **Task triển khai đầu tiên: 1.1 — Khởi tạo project Python 3.11 với uv và khung kiểm tra.**
+
+### Quyết định dữ liệu SFT cập nhật
+
+Dừng phát triển bộ lọc Orca. SFT dùng 100% GSM8K train, 0% Orca. Tách cố định 500 câu validation; 1.319 câu test chỉ dùng đánh giá cuối. Số mẫu/token thực tế ghi theo tokenizer chính thức. Bắt đầu 1 epoch, tối đa 3 epoch và trần 8M token, dừng sớm theo validation. Artifact mới ở `data/sft_gsm8k/`.
