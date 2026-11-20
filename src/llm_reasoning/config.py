@@ -30,28 +30,23 @@ class PathsConfig:
 class DataConfig:
     fineweb_repo: str = "HuggingFaceFW/fineweb-edu"
     math_repo: str = "open-web-math/open-web-math"
-    orca_repo: str = "microsoft/orca-math-word-problems-200k"
     gsm8k_repo: str = "openai/gsm8k"
     fineweb_tokens: int = 80_000_000
     math_tokens: int = 20_000_000
     pretrain_validation_fraction: float = 0.01
     gsm8k_validation_examples: int = 500
-    orca_min_examples: int = 20_000
-    orca_max_examples: int = 40_000
-    sft_min_tokens: int = 5_000_000
+    sft_max_epochs: int = 3
     sft_max_tokens: int = 8_000_000
     seed: int = 42
 
     def __post_init__(self) -> None:
-        if not all((self.fineweb_repo, self.math_repo, self.orca_repo, self.gsm8k_repo)):
+        if not all((self.fineweb_repo, self.math_repo, self.gsm8k_repo)):
             raise ValueError("dataset repository names must be nonempty")
         if min(self.fineweb_tokens, self.math_tokens, self.gsm8k_validation_examples,
-               self.orca_min_examples, self.sft_min_tokens) <= 0:
+               self.sft_max_epochs, self.sft_max_tokens) <= 0:
             raise ValueError("dataset sizes and token budgets must be positive")
         if not 0 < self.pretrain_validation_fraction < 1:
             raise ValueError("pretrain_validation_fraction must be between 0 and 1")
-        if self.orca_max_examples < self.orca_min_examples or self.sft_max_tokens < self.sft_min_tokens:
-            raise ValueError("dataset maximum must be at least its minimum")
 
 
 @dataclass(frozen=True)

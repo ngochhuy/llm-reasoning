@@ -1,4 +1,4 @@
-"""Prepare response-masked mathematical SFT examples from Orca Math and GSM8K."""
+"""Prepare response-masked mathematical SFT examples from GSM8K only."""
 
 import argparse
 import hashlib
@@ -9,12 +9,16 @@ from pathlib import Path
 from typing import Iterable, Mapping
 
 from llm_reasoning.config import make_config
-from llm_reasoning.data_prep import content_key, prepare_orca_rows, split_gsm8k, stable_bucket
+from llm_reasoning.data_prep import content_key, split_gsm8k
 from llm_reasoning.tokenizer import ByteBPETokenizer
 
 
-_NUMBER = re.compile(r"(?<![\w.])-?\d[\d,]*(?:\.\d+)?(?:/\d+)?(?![\w.])")
+_NUMBER = re.compile(
+    r"(?<![\w.])-?(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?(?:/\d+)?"
+    r"(?![\w,]|\.\d)"
+)
 _GSM_FINAL = re.compile(r"####\s*(-?\d[\d,]*(?:\.\d+)?(?:/\d+)?)\s*$")
+_SENTENCE_BOUNDARY = re.compile(r"(?<=[.!?])\s+(?=[A-Z])")
 
 
 @dataclass
@@ -59,19 +63,23 @@ def extract_gsm_answer(text: str) -> tuple[str, str] | None:
 
 
 def extract_orca_answer(text: str) -> tuple[str, str] | None:
-    """Conservative heuristic: require multi-step text and a final numeric answer."""
+    """Accept only an unambiguous scalar in the final sentence.
+
+    Orca has no structured answer field. Taking its last number often captures a
+    repeated value from the question instead of the result, so ambiguous endings
+    must be reviewed or discarded rather than silently mislabeled.
+    """
     words = re.findall(r"\b\w+\b", text)
     if len(words) < 20 or len(_NUMBER.findall(text)) < 2:
         return None
-    tail = text[-180:]
-    candidates = list(_NUMBER.finditer(tail))
-    if not candidates:
+    final_paragraph = re.split(r"\n\s*\n+", text.strip())[-1]
+    final_sentence = _SENTENCE_BOUNDARY.split(final_paragraph)[-1]
+    if re.search(r"(?:π|\bpi\b)", final_sentence, flags=re.IGNORECASE):
         return None
-    final = candidates[-1]
-    # Avoid interpreting an intermediate number as a final answer.
-    if len(tail[final.end():].strip(" .!\n")) > 35:
+    candidates = [match.group() for match in _NUMBER.finditer(final_sentence)]
+    if len(candidates) != 1:
         return None
-    return text.strip(), normalize_number(final.group())
+    return text.strip(), normalize_number(candidates[0])
 
 
 def encode_example(tokenizer: ByteBPETokenizer, *, source: str, question: str,
@@ -118,25 +126,19 @@ def prepare_split(rows: Iterable[Mapping[str, str]], *, source: str,
 
 def prepare_sft(
     gsm_train: Iterable[Mapping[str, object]], gsm_test: Iterable[Mapping[str, object]],
-    orca_rows: Iterable[Mapping[str, object]], *, tokenizer: ByteBPETokenizer,
-    output_dir: Path, gsm_revision: str, orca_revision: str,
-    validation_count: int = 500, orca_limit: int = 40_000,
+    *, tokenizer: ByteBPETokenizer,
+    output_dir: Path, gsm_revision: str,
+    validation_count: int = 500,
     max_seq_len: int = 1_024, seed: int = 42,
 ) -> dict:
-    if orca_limit <= 0 or max_seq_len <= 0:
-        raise ValueError("orca_limit and max_seq_len must be positive")
+    if max_seq_len <= 0:
+        raise ValueError("max_seq_len must be positive")
+    if (output_dir / "orca_train.jsonl").exists():
+        raise ValueError("Legacy Orca artifact found; choose a new GSM8K-only output directory")
     gsm = split_gsm8k(gsm_train, gsm_test, revision=gsm_revision, seed=seed,
                       validation_count=validation_count)
-    orca, orca_manifest = prepare_orca_rows(orca_rows, revision=orca_revision,
-                                            protected_question_keys=gsm.protected_question_keys, seed=seed)
-    # Sort by seeded question hash; selection is independent of source order.
-    orca.sort(key=lambda row: (stable_bucket(content_key(row["question"]), seed),
-                               content_key(row["question"])))
     output_dir.mkdir(parents=True, exist_ok=True)
     splits = {
-        "orca_train": prepare_split(orca, source="orca", tokenizer=tokenizer,
-                                    max_seq_len=max_seq_len, output_path=output_dir / "orca_train.jsonl",
-                                    gsm=False, accepted_limit=orca_limit),
         "gsm_train": prepare_split(gsm.train, source="gsm8k", tokenizer=tokenizer,
                                   max_seq_len=max_seq_len, output_path=output_dir / "gsm_train.jsonl", gsm=True),
         "gsm_validation": prepare_split(gsm.validation, source="gsm8k", tokenizer=tokenizer,
@@ -147,8 +149,7 @@ def prepare_sft(
         for row in gsm.test:
             output.write(json.dumps(row, ensure_ascii=False) + "\n")
     manifest = {"seed": seed, "max_seq_len": max_seq_len, "gsm_revision": gsm_revision,
-                "orca_revision": orca_revision, "gsm_split": asdict(gsm.manifest),
-                "orca_cleaning": asdict(orca_manifest), "orca_limit": orca_limit,
+                "sft_sources": ["gsm8k"], "gsm_split": asdict(gsm.manifest),
                 "splits": splits, "test_examples": len(gsm.test)}
     (output_dir / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",
                                                encoding="utf-8")
@@ -156,10 +157,9 @@ def prepare_sft(
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Prepare math SFT JSONL from Orca Math and GSM8K")
+    parser = argparse.ArgumentParser(description="Prepare math SFT JSONL from GSM8K only")
     parser.add_argument("--pretrain-dir", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--orca-limit", type=int, default=40_000)
     args = parser.parse_args()
     try:
         from datasets import load_dataset
@@ -171,14 +171,12 @@ def main() -> None:
     tokenizer = ByteBPETokenizer.load(tokenizer_path)
     api = HfApi()
     gsm_revision = api.repo_info(repo_id=config.data.gsm8k_repo, repo_type="dataset").sha
-    orca_revision = api.repo_info(repo_id=config.data.orca_repo, repo_type="dataset").sha
     gsm_train = load_dataset(config.data.gsm8k_repo, "main", split="train", revision=gsm_revision)
     gsm_test = load_dataset(config.data.gsm8k_repo, "main", split="test", revision=gsm_revision)
-    orca = load_dataset(config.data.orca_repo, split="train", revision=orca_revision)
-    manifest = prepare_sft(gsm_train, gsm_test, orca, tokenizer=tokenizer, output_dir=args.output,
-                           gsm_revision=gsm_revision, orca_revision=orca_revision,
+    manifest = prepare_sft(gsm_train, gsm_test, tokenizer=tokenizer, output_dir=args.output,
+                           gsm_revision=gsm_revision,
                            validation_count=config.data.gsm8k_validation_examples,
-                           orca_limit=args.orca_limit, max_seq_len=config.train.sft_seq_len,
+                           max_seq_len=config.train.sft_seq_len,
                            seed=config.data.seed)
     manifest["tokenizer_sha256"] = hashlib.sha256(tokenizer_path.read_bytes()).hexdigest()
     (args.output / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n",

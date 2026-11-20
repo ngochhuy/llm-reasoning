@@ -71,10 +71,9 @@ Triển khai byte-level BPE hoặc BPE có cơ chế xử lý mọi byte/ký t�
 
 | Nguồn | Cách dùng |
 |---|---|
-| [Orca Math Word Problems 200K](https://huggingface.co/datasets/microsoft/orca-math-word-problems-200k) | Chọn khoảng 20–40 nghìn bài phù hợp cấp độ GSM8K, có lời giải đầy đủ; lọc trùng và mẫu lỗi. |
 | [GSM8K train](https://huggingface.co/datasets/openai/gsm8k) | Tách train/validation cố định; sử dụng để căn chỉnh dạng câu hỏi, lời giải và đáp số. |
 
-Mục tiêu **5–8 triệu token đã xử lý** trong SFT, tính cả số lượt lặp. Chốt số epoch từ độ dài thực tế của dữ liệu và validation, không mặc định lặp nhiều lần GSM8K. GSM8K test chỉ dùng đánh giá cuối; không dùng để cập nhật trọng số, chọn checkpoint, chỉnh prompt, chỉnh verifier hoặc các siêu tham số.
+SFT chỉ dùng GSM8K train: tách 500 câu validation từ 7.473 câu, còn 6.973 câu trước lọc. Bắt đầu 1 epoch, tối đa 3 epoch và trần 8M token đã xử lý; chọn checkpoint bằng validation, không ép đạt tối thiểu 5M token. Dừng mở rộng bộ lọc Orca do rủi ro nhãn và chất lượng lời giải. GSM8K test chỉ dùng đánh giá cuối; không dùng để cập nhật trọng số, chọn checkpoint, chỉnh prompt, chỉnh verifier hoặc các siêu tham số.
 
 Mọi ví dụ dùng cùng mẫu:
 
@@ -88,7 +87,7 @@ Question: <problem>
 </answer>
 ```
 
-Chuẩn hóa lời giải GSM8K (bao gồm ký hiệu phép tính `<<...>>` và đáp số `####`) và Orca Math sang mẫu này. Tính loss trên phần lời giải và đáp số; mask phần prompt câu hỏi. Loại các mẫu không thể trích đáp số đáng tin cậy hoặc ghi riêng tỷ lệ lỗi chuyển đổi.
+Chuẩn hóa lời giải GSM8K (bao gồm ký hiệu phép tính `<<...>>` và đáp số `####`) sang mẫu này. Tính loss trên phần lời giải và đáp số; mask phần prompt câu hỏi. Loại các mẫu không thể trích đáp số đáng tin cậy hoặc ghi riêng tỷ lệ lỗi chuyển đổi.
 
 ## 4. Kế hoạch huấn luyện trên Kaggle
 
@@ -186,7 +185,7 @@ Chọn **TensorBoard** để lưu train/validation loss của cả pretrain và 
 | 1–2 | Repository, cấu hình, pipeline dữ liệu mẫu, BPE và kiểm tra tokenizer. |
 | 3–4 | Transformer, forward/backward, causal mask, RoPE, greedy generation, KV cache, kiểm tra cached/non-cached, lưu/resume và chuẩn bị script profiling. |
 | 5–6 | Pilot trong cùng run, pretrain theo mốc thời gian, checkpoint và log; demo nạp checkpoint pretrain và profiling chính thức cache ON/OFF trên T4. |
-| 7 | SFT Orca Math + GSM8K train, chọn checkpoint theo validation; bàn giao TensorBoard logs và biểu đồ loss cả hai giai đoạn. |
+| 7 | SFT chỉ trên GSM8K train, chọn checkpoint theo validation; bàn giao TensorBoard logs và biểu đồ loss cả hai giai đoạn. |
 | 8–9 | Rà báo cáo KV cache từ checkpoint pretrain; bộ trích đáp số, self-consistency và verifier trên validation bằng checkpoint SFT. |
 | 10 | Khóa cấu hình, chạy đánh giá test; lưu dự đoán, chi phí và ít nhất năm ca sai. |
 | 11–12 | Báo cáo IEEE conference hai cột 6–8 trang, README với lệnh tái lập đánh giá, demo terminal tương tác, slide và rà kết quả tái lập. |
