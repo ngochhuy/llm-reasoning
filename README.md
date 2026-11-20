@@ -15,6 +15,10 @@ uv run pytest
 
 Kaggle GPU setup, data preparation, training, and evaluation commands will be added in their respective tasks. Generated data and checkpoints are stored outside Git.
 
+## Preflight before Kaggle training (task 3.1)
+
+Run `python -m llm_reasoning.preflight --data-root /kaggle/input/llm-reasoning-data --output-root /kaggle/working/pretrain_run --repo /kaggle/working/llm-reasoning-repo --expected-commit <40-character-SHA> --quota-confirmed --report /kaggle/working/preflight.json` after checking GPU quota in your Kaggle account. It validates pinned clean code, CUDA, tokenizer hashes, the 80M/20M pretrain shards with validation, GSM8K-only SFT rows and writable output space. Notebook 04 runs the same check and blocks `production` if it fails. The local dry-run data is intentionally insufficient; see [task 3.1 report](docs/task_3_1_preflight_report.md).
+
 ## Stage 2 notebook handoff (task 2.10)
 
 Notebooks `03_model_sanity_checks.ipynb`, `04_pretraining.ipynb`, `05_kv_cache_profiling.ipynb`, and `06_math_sft.ipynb` are generated from `scripts/build_stage2_notebooks.py`. Notebook 03 checks the core, toy overfit and exact CPU resume. Notebooks 04–06 default to `RUN_MODE='inspect'`; change to `smoke` for a tiny CPU flow on the prepared artifacts. Production/T4 remains gated by `RUN_MODE='production'` (or `official` for profiling), pinned Git SHA, CUDA and reviewed data. A pretrain checkpoint moves into notebook 05 and 06; SFT loads its weights but starts a fresh optimizer. Both training notebooks save full-state `latest.pt`, CSV/TensorBoard logs and a run manifest. See [task 2.10 report](docs/task_2_10_notebooks_report.md) for input paths, smoke verification and the next review gate.

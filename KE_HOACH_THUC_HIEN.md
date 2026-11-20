@@ -81,6 +81,8 @@ Không tạo bản đề cương kỹ thuật 2 trang theo quyết định của
 | 3.5 | Xuất và kiểm tra artifact | Checkpoint cuối, tokenizer, cấu hình, log dạng bảng, TensorBoard event files và biểu đồ loss; kiểm tra nạp lại từ bản đã xuất. |
 | 3.6 | Phân tích và bàn giao | Báo ổn định, overfit, định dạng đầu ra, token, throughput, VRAM và thời gian GPU; chốt checkpoint đánh giá duy nhất. |
 
+**Trạng thái task 3.1:** đã thêm kiểm tra tự động `python -m llm_reasoning.preflight` và chạy trên artifact local. Tokenizer hash, định dạng shard, GSM8K split/row count và nơi lưu local đạt. Dữ liệu pretrain hiện chỉ là dry run (99.840 FineWeb + 24.576 math token, không có validation shard); ba commit còn ahead `origin/main`; GPU/quota Kaggle chưa kiểm tra. Notebook 04 `production` chặn khi preflight chưa đạt. Báo cáo: `docs/task_3_1_preflight_report.md`. Chưa bắt đầu pilot/task 3.2.
+
 **Mặc định khởi điểm:** pretrain sequence 512; SFT tối đa 1024; AdamW learning rate pretrain 3e-4 và SFT 3e-5; gradient clipping 1.0; warmup 5%; effective batch mục tiêu khoảng 16.384 token. Chọn micro-batch bằng kiểm tra VRAM trước run và ghi cấu hình thực tế.
 
 Checkpoint mỗi 30 phút và khi chuyển giai đoạn. Nếu chạy một phiên 12 giờ, tính thêm thời gian profiling từ pilot và dành trước 2–3 giờ cuối cho SFT, kiểm tra và xuất kết quả; giảm token pretrain nếu cần. Nếu cần đổi phiên, xác nhận artifact đã lưu bền vững và resume cùng run. Không cam kết 100M token nếu throughput không đáp ứng.

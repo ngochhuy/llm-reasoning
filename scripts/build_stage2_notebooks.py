@@ -107,9 +107,11 @@ from llm_reasoning.model import TransformerLM
 from llm_reasoning.tokenizer import ByteBPETokenizer
 from llm_reasoning.training import Trainer, TrainingLogger
 from llm_reasoning.training_data import PretrainBatches
+from llm_reasoning.preflight import inspect as run_preflight
 import time
 
 RUN_MODE = 'inspect'  # inspect | smoke | production; bật production sau review.
+QUOTA_CONFIRMED = False  # chỉ True sau khi tự kiểm tra GPU hours/session limit trong Kaggle.
 DATA_ROOT = Path('/kaggle/input/llm-reasoning-data/pretrain') if ON_KAGGLE else REPO_DIR/'artifacts/data/pretrain'
 OUTPUT_ROOT = Path('/kaggle/working/pretrain_run') if ON_KAGGLE else REPO_DIR/'artifacts/nb04_pretrain'
 RESUME_FROM = None  # Path đến latest.pt đã lưu bền vững; giữ đúng dataset, commit và thiết bị.
@@ -134,6 +136,12 @@ if RUN_MODE == 'production':
             raise ValueError(f'{source} chưa đạt ngân sách token pretrain; tạo lại dữ liệu trước GPU run')
 print('Mode:', RUN_MODE, 'tokenizer SHA:', file_sha256(tokenizer_path), 'vocab:', tokenizer.vocab_size)
 print('Source train tokens:', {s: d['shards']['train']['written_tokens'] for s,d in manifest['sources'].items()})
+preflight = run_preflight(DATA_ROOT.parent, OUTPUT_ROOT, REPO_DIR,
+                          production=ON_KAGGLE, expected_commit=REPO_REF if ON_KAGGLE else None,
+                          quota_confirmed=QUOTA_CONFIRMED)
+print('Preflight:', [(item['name'], item['status']) for item in preflight['checks']])
+if RUN_MODE == 'production' and not preflight['ready']:
+    raise RuntimeError('Preflight chưa đạt; xem các mục fail/pending trước GPU run')
 '''),
     markdown('''## Kiểm tra batch và tính lịch train
 
