@@ -24,7 +24,7 @@ def _git(repo: Path, *args: str) -> str | None:
 
 def inspect(data_root: Path, output_root: Path, repo: Path, *,
             production: bool = True, expected_commit: str | None = None,
-            quota_confirmed: bool = False) -> dict:
+            quota_confirmed: bool = False, require_sft: bool = True) -> dict:
     """Return evidence and explicit pass/fail/pending checks; never start training."""
     checks = []
 
@@ -59,7 +59,8 @@ def inspect(data_root: Path, output_root: Path, repo: Path, *,
     sft = data_root / 'sft_gsm8k'
     try:
         pre_manifest = json.loads((pretrain/'manifest.json').read_text(encoding='utf-8'))
-        sft_manifest = json.loads((sft/'manifest.json').read_text(encoding='utf-8'))
+        sft_manifest = (json.loads((sft/'manifest.json').read_text(encoding='utf-8'))
+                        if require_sft else None)
         tokenizer_path = pretrain/'tokenizer.json'
         tokenizer = ByteBPETokenizer.load(tokenizer_path)
         sha = file_sha256(tokenizer_path)
@@ -69,9 +70,11 @@ def inspect(data_root: Path, output_root: Path, repo: Path, *,
                     data_root=str(data_root), output_root=str(output_root))
 
     check('tokenizer_hash', sha == pre_manifest.get('tokenizer_sha256')
-          == sft_manifest.get('tokenizer_sha256') and tokenizer.vocab_size == pre_manifest.get('vocab_size'),
+          and (not require_sft or sha == sft_manifest.get('tokenizer_sha256'))
+          and tokenizer.vocab_size == pre_manifest.get('vocab_size'),
           dict(actual_sha256=sha, pretrain_sha256=pre_manifest.get('tokenizer_sha256'),
-               sft_sha256=sft_manifest.get('tokenizer_sha256'), vocab_size=tokenizer.vocab_size))
+               sft_sha256=sft_manifest.get('tokenizer_sha256') if require_sft else None,
+               vocab_size=tokenizer.vocab_size))
     block = pre_manifest.get('block_size')
     check('pretrain_format', block == 512 and pre_manifest.get('token_dtype') == 'uint16'
           and pre_manifest.get('byte_order') == sys.byteorder,
@@ -97,24 +100,25 @@ def inspect(data_root: Path, output_root: Path, repo: Path, *,
         except (KeyError, OSError, TypeError, ValueError) as exc:
             check(f'{source}_shards', False, str(exc))
 
-    split = sft_manifest.get('gsm_split', {})
-    only_gsm = sft_manifest.get('sft_sources') == ['gsm8k'] and not (sft/'orca_train.jsonl').exists()
-    check('sft_source_and_split', only_gsm and split.get('validation') == 500
-          and split.get('test') == 1319 and sft_manifest.get('test_examples') == 1319,
-          dict(sources=sft_manifest.get('sft_sources'), validation=split.get('validation'),
-               test=split.get('test'), legacy_orca_present=(sft/'orca_train.jsonl').exists()))
-    for label, name in (('train', 'gsm_train.jsonl'), ('validation', 'gsm_validation.jsonl'),
-                        ('test', 'gsm_test.jsonl')):
-        path = sft/name
-        try:
-            with path.open(encoding='utf-8') as file:
-                count = sum(1 for line in file if line.strip())
-            expected = (sft_manifest['splits'][f'gsm_{label}']['accepted']
-                        if label != 'test' else sft_manifest['test_examples'])
-            check(f'sft_{label}_rows', count == expected and count > 0,
-                  dict(actual=count, expected=expected, file=str(path)))
-        except (KeyError, OSError, ValueError) as exc:
-            check(f'sft_{label}_rows', False, str(exc))
+    if require_sft:
+        split = sft_manifest.get('gsm_split', {})
+        only_gsm = sft_manifest.get('sft_sources') == ['gsm8k'] and not (sft/'orca_train.jsonl').exists()
+        check('sft_source_and_split', only_gsm and split.get('validation') == 500
+              and split.get('test') == 1319 and sft_manifest.get('test_examples') == 1319,
+              dict(sources=sft_manifest.get('sft_sources'), validation=split.get('validation'),
+                   test=split.get('test'), legacy_orca_present=(sft/'orca_train.jsonl').exists()))
+        for label, name in (('train', 'gsm_train.jsonl'), ('validation', 'gsm_validation.jsonl'),
+                            ('test', 'gsm_test.jsonl')):
+            path = sft/name
+            try:
+                with path.open(encoding='utf-8') as file:
+                    count = sum(1 for line in file if line.strip())
+                expected = (sft_manifest['splits'][f'gsm_{label}']['accepted']
+                            if label != 'test' else sft_manifest['test_examples'])
+                check(f'sft_{label}_rows', count == expected and count > 0,
+                      dict(actual=count, expected=expected, file=str(path)))
+            except (KeyError, OSError, ValueError) as exc:
+                check(f'sft_{label}_rows', False, str(exc))
 
     try:
         output_root.mkdir(parents=True, exist_ok=True)
@@ -140,11 +144,13 @@ def main(argv=None):
     parser.add_argument('--quota-confirmed', action='store_true',
                         help='Use only after personally checking Kaggle GPU quota')
     parser.add_argument('--local', action='store_true', help='Check data without requiring Kaggle/CUDA')
+    parser.add_argument('--pretrain-only', action='store_true',
+                        help='Check only pretrain artifacts; prepare SFT later with the same tokenizer')
     parser.add_argument('--report', type=Path)
     args = parser.parse_args(argv)
     result = inspect(args.data_root, args.output_root, args.repo,
                      production=not args.local, expected_commit=args.expected_commit,
-                     quota_confirmed=args.quota_confirmed)
+                     quota_confirmed=args.quota_confirmed, require_sft=not args.pretrain_only)
     encoded = json.dumps(result, ensure_ascii=False, indent=2) + '\n'
     if args.report:
         args.report.parent.mkdir(parents=True, exist_ok=True)

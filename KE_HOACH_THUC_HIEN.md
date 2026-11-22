@@ -89,6 +89,8 @@ Checkpoint mỗi 30 phút và khi chuyển giai đoạn. Nếu chạy một phi�
 
 **Điểm dừng:** review mô hình và log trước đánh giá. Đường loss chưa hội tụ tốt vẫn phải báo trung thực; không tự train lại mô hình khác.
 
+**Cập nhật thứ tự chạy (22/11/2026):** Artifact pretrain chính thức từ Kaggle CPU đã được kiểm tra trong `results.zip`: 80.000.000 token FineWeb, 19.999.744 token math, validation shards và tokenizer BPE 8.000 đều hợp lệ. Chạy notebook 04 pretrain trước; bước preflight của notebook này không yêu cầu artifact SFT. Sau khi lưu bền vững checkpoint pretrain và tokenizer, tạo GSM8K SFT bằng cùng tokenizer rồi mới chạy notebook 06. Không cần chạy lại pretrain vì SFT được chuẩn bị sau. Phải gắn Dataset từ ZIP vào Kaggle Input và kiểm tra `inspect`/GPU/quota trước `production`. Các con số dry run local trong trạng thái task 3.1 ở trên là kết quả cũ, không mô tả ZIP chính thức.
+
 ## 5. Giai đoạn 4 — Đánh giá hướng C và tổng hợp profiling
 
 **Lịch mục tiêu:** ngày 8–10. **Review 4:** kết quả, phân tích lỗi và giới hạn kết luận.

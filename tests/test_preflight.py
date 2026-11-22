@@ -49,3 +49,14 @@ def test_dry_run_data_rejected_without_losing_valid_evidence(tmp_path):
     assert found['fineweb_validation_shards'] == found['math_validation_shards'] == 'fail'
     assert found['sft_train_rows'] == 'pass'
     assert result['ready'] is False
+
+    for path in sft.iterdir():
+        path.unlink()
+    sft.rmdir()
+    pretrain_only = inspect(data, tmp_path/'output', tmp_path/'not_a_repo',
+                            production=False, require_sft=False)
+    found = statuses(pretrain_only)
+    assert found['tokenizer_hash'] == found['pretrain_format'] == 'pass'
+    assert not any(name.startswith('sft_') for name in found)
+    assert statuses(inspect(data, tmp_path/'output', tmp_path/'not_a_repo',
+                            production=False))['data_manifests'] == 'fail'

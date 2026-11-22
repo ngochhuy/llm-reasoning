@@ -42,3 +42,7 @@ python -m llm_reasoning.preflight \
 ```
 
 **Trạng thái:** đã triển khai và chạy kiểm tra task 3.1; **chưa đạt điều kiện bắt đầu GPU run**. Chưa huấn luyện mô hình chính, chưa thực hiện task 3.2.
+
+## Cập nhật sau khi kiểm tra ZIP Kaggle
+
+`results.zip` tải từ notebook 02 chứa đầy đủ pretrain: 80.000.000 token FineWeb, 19.999.744 token OpenWebMath, hai tập validation và tokenizer BPE 8.000. File trong ZIP qua kiểm tra CRC, kích thước shard và hash tokenizer. Artifact SFT chính thức chưa có; chỉ có dữ liệu smoke. Theo quyết định mới, notebook 04 dùng preflight `require_sft=False` (CLI `--pretrain-only`) và tự tìm `pretrain/manifest.json` trong Dataset đã gắn ở `/kaggle/input`. Sau pretrain, tạo SFT từ cùng tokenizer trước notebook 06. Các bước 2 và 4 trong danh sách cũ ở trên được thay bằng quy trình này; vẫn phải kiểm tra GPU, quota, commit và output trước khi bật `production`.

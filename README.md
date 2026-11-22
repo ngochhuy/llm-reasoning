@@ -17,7 +17,7 @@ Kaggle GPU setup, data preparation, training, and evaluation commands will be ad
 
 ## Preflight before Kaggle training (task 3.1)
 
-Run `python -m llm_reasoning.preflight --data-root /kaggle/input/llm-reasoning-data --output-root /kaggle/working/pretrain_run --repo /kaggle/working/llm-reasoning-repo --expected-commit <40-character-SHA> --quota-confirmed --report /kaggle/working/preflight.json` after checking GPU quota in your Kaggle account. It validates pinned clean code, CUDA, tokenizer hashes, the 80M/20M pretrain shards with validation, GSM8K-only SFT rows and writable output space. Notebook 04 runs the same check and blocks `production` if it fails. The local dry-run data is intentionally insufficient; see [task 3.1 report](docs/task_3_1_preflight_report.md).
+For pretrain, attach the private Kaggle Dataset made from the verified `results.zip` and run notebook 04 in `inspect` mode. It discovers the single `pretrain/manifest.json` under `/kaggle/input`; inspect the printed path and checks before changing to `production`. Notebook 04 checks only pretrain artifacts, so GSM8K SFT preparation can follow pretrain. The CLI equivalent adds `--pretrain-only` and uses the parent of the discovered `pretrain` directory as `--data-root`. Keep the tokenizer and final pretrain checkpoint for later SFT. The local dry-run data is insufficient; see [task 3.1 report](docs/task_3_1_preflight_report.md).
 
 ## Stage 2 notebook handoff (task 2.10)
 
